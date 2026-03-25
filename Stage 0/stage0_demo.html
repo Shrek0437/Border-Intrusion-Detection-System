@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BL-37 · Border Intrusion Classifier</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  
+/* ─── LAYOUT FIX ───────────────────────────────────────── */
+
+.main{
+  display:grid;
+  grid-template-columns: 1fr 380px;
+  height: calc(100vh - 53px);
+  overflow: hidden;
+}
+
+.left, .right{
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+  scroll-behavior: smooth;
+}
+
+/* ─── CAMERA FIX ───────────────────────────────────────── */
+
+.cam-preview{
+  background:var(--s2);
+  border:1px solid var(--border);
+  border-radius:8px;
+  aspect-ratio: 16/9;
+  max-height:auto;
+  width: auto;
+  overflow:hidden;
+  position:relative;
+  margin-bottom:16px;
+}
+
+/* ─── FEATURE SCROLL FIX ───────────────────────────────── */
+
+.feat-scroll{
+  max-height:38vh;
+  overflow-y:auto;
+  padding-right:1px;
+}
+
+/* optional scrollbar styling (because aesthetics matter) */
+.feat-scroll::-webkit-scrollbar,
+.left::-webkit-scrollbar,
+.right::-webkit-scrollbar{
+  width:6px;
+}
+
+.feat-scroll::-webkit-scrollbar-thumb,
+.left::-webkit-scrollbar-thumb,
+.right::-webkit-scrollbar-thumb{
+  background:rgba(255,255,255,0.1);
+  border-radius:4px;
+}
+
+/* reduce spacing slightly so things actually fit */
+.feat-group{ margin-bottom:14px }
+.sec-hdr{ margin-bottom:10px }
+
+
+:root{
+  --bg:#07090d;
+  --s1:#0d1017;
+  --s2:#131720;
+  --s3:#1a1f2e;
+  --border:rgba(255,255,255,0.07);
+  --border2:rgba(255,255,255,0.13);
+  --text:#dde1ec;
+  --muted:#6b7291;
+  --dim:#3d4360;
+
+  --clear:#34d399;   --clear-bg:rgba(52,211,153,0.1);   --clear-bd:rgba(52,211,153,0.3);
+  --human:#f97316;   --human-bg:rgba(249,115,22,0.1);   --human-bd:rgba(249,115,22,0.3);
+  --vehicle:#3b82f6; --vehicle-bg:rgba(59,130,246,0.1); --vehicle-bd:rgba(59,130,246,0.3);
+  --animal:#a78bfa;  --animal-bg:rgba(167,139,250,0.1); --animal-bd:rgba(167,139,250,0.3);
+  --env:#fbbf24;     --env-bg:rgba(251,191,36,0.1);     --env-bd:rgba(251,191,36,0.3);
+
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden}
+
+/* scanline overlay */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:999;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+}
+
+/* top nav */
+nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 28px;border-bottom:1px solid var(--border);
+  background:var(--s1);position:sticky;top:0;z-index:50;
+}
+.nav-left{display:flex;align-items:center;gap:14px}
+.nav-logo{
+  font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:2px;
+  color:var(--text);text-transform:uppercase
+}
+.nav-logo span{color:var(--human)}
+.nav-pill{
+  font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+  padding:3px 9px;border-radius:3px;
+  background:var(--human-bg);color:var(--human);border:1px solid var(--human-bd)
+}
+.nav-right{display:flex;align-items:center;gap:20px}
+.nav-stat{text-align:right}
+.nav-stat-val{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--clear)}
+.nav-stat-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px}
+.live-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--clear);
+  box-shadow:0 0 6px var(--clear);animation:blink 2s ease infinite
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* layout */
+.main{display:grid;grid-template-columns:1fr 400px;height:calc(100vh - 53px)}
+@media(max-width:900px){.main{grid-template-columns:1fr;height:auto}}
+
+/* left panel */
+.left{overflow-y:auto;border-right:1px solid var(--border);padding:24px}
+.right{overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px}
+
+/* section header */
+.sec-hdr{
+  display:flex;align-items:center;gap:8px;margin-bottom:14px;
+  font-family:var(--mono);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)
+}
+.sec-hdr::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* camera preview */
+.cam-preview{
+  background:var(--s2);border:1px solid var(--border);border-radius:8px;
+  aspect-ratio:16/9;overflow:hidden;position:relative;margin-bottom:20px
+}
+.cam-canvas{width:100%;height:100%;display:block}
+.cam-overlay{
+  position:absolute;inset:0;pointer-events:none;
+  border:1px solid rgba(255,255,255,0.04);border-radius:7px
+}
+.cam-label{
+  position:absolute;top:10px;left:12px;
+  font-family:var(--mono);font-size:9px;color:rgba(255,255,255,0.5);letter-spacing:1px
+}
+.cam-time{
+  position:absolute;top:10px;right:12px;
+  font-family:var(--mono);font-size:9px;color:rgba(255,255,255,0.5)
+}
+.cam-bbox{
+  position:absolute;border:2px solid var(--human);border-radius:2px;
+  transition:all 0.3s ease;display:none
+}
+.cam-bbox-label{
+  position:absolute;top:-20px;left:0;
+  font-family:var(--mono);font-size:9px;font-weight:600;
+  background:var(--human);color:#07090d;padding:2px 6px;border-radius:2px;
+  white-space:nowrap
+}
+
+/* presets */
+.presets{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px}
+.preset{
+  border:1px solid var(--border);border-radius:8px;padding:10px 4px;
+  text-align:center;cursor:pointer;background:var(--s2);transition:all 0.15s
+}
+.preset:hover{border-color:var(--border2);background:var(--s3)}
+.preset.active-Clear   {border-color:var(--clear-bd);background:var(--clear-bg)}
+.preset.active-Human   {border-color:var(--human-bd);background:var(--human-bg)}
+.preset.active-Vehicle {border-color:var(--vehicle-bd);background:var(--vehicle-bg)}
+.preset.active-Animal  {border-color:var(--animal-bd);background:var(--animal-bg)}
+.preset.active-Environmental{border-color:var(--env-bd);background:var(--env-bg)}
+.preset-icon{font-size:18px;display:block;margin-bottom:4px}
+.preset-name{font-size:9px;font-family:var(--mono);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted)}
+.preset.active-Clear .preset-name{color:var(--clear)}
+.preset.active-Human .preset-name{color:var(--human)}
+.preset.active-Vehicle .preset-name{color:var(--vehicle)}
+.preset.active-Animal .preset-name{color:var(--animal)}
+.preset.active-Environmental .preset-name{color:var(--env)}
+
+/* feature grid */
+.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px}
+.feat-group{margin-bottom:18px}
+.feat-group-title{
+  font-size:9px;font-family:var(--mono);font-weight:600;text-transform:uppercase;
+  letter-spacing:1px;color:var(--dim);margin-bottom:8px;
+  padding-bottom:4px;border-bottom:1px solid var(--border)
+}
+.feat-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;gap:8px}
+.feat-lbl{font-size:11px;color:var(--muted);flex:1;white-space:nowrap}
+.feat-unit{font-size:9px;color:var(--dim);margin-right:2px}
+.feat-inp{
+  width:72px;background:var(--s3);border:1px solid var(--border);border-radius:5px;
+  color:var(--text);font-family:var(--mono);font-size:11px;
+  padding:4px 7px;text-align:right;outline:none;transition:border-color 0.15s
+}
+.feat-inp:focus{border-color:rgba(249,115,22,0.5)}
+.feat-inp.hi{border-color:rgba(249,115,22,0.35);background:rgba(249,115,22,0.04)}
+
+/* classify button */
+.classify-btn{
+  width:100%;padding:13px;margin-top:4px;
+  background:linear-gradient(135deg,#f97316,#ea580c);
+  color:#fff;border:none;border-radius:7px;
+  font-family:var(--mono);font-size:12px;font-weight:600;
+  letter-spacing:2px;text-transform:uppercase;cursor:pointer;
+  transition:all 0.15s;box-shadow:0 0 24px rgba(249,115,22,0.2)
+}
+.classify-btn:hover{filter:brightness(1.1);box-shadow:0 0 32px rgba(249,115,22,0.35)}
+.classify-btn:active{transform:scale(0.99)}
+.classify-btn:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none}
+
+
+@keyframes slideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.hist-cls{font-family:var(--mono);font-size:10px;font-weight:600;width:80px}
+.hist-cls.Clear{color:var(--clear)}
+.hist-cls.Human{color:var(--human)}
+.hist-cls.Vehicle{color:var(--vehicle)}
+.hist-cls.Animal{color:var(--animal)}
+.hist-cls.Environmental{color:var(--env)}
+.hist-desc{font-size:10px;color:var(--muted);flex:1}
+.hist-conf{font-family:var(--mono);font-size:9px;color:var(--dim)}
+.hist-time{font-family:var(--mono);font-size:9px;color:var(--dim)}
+
+.idle{text-align:center;padding:32px 16px;color:var(--muted);font-size:12px}
+.idle-icon{font-size:32px;display:block;margin-bottom:8px;opacity:0.25}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-left">
+    <div class="nav-logo">BL<span>·</span>37</div>
+    <div class="nav-pill">Stage 0 Demo</div>
+    <div style="font-size:11px;color:var(--muted)">Physical Border Intrusion Detection</div>
+  </div>
+  <div class="nav-right">
+    <div class="nav-stat">
+      <div class="nav-stat-val" id="hdr-acc">100%</div>
+      <div class="nav-stat-lbl">Accuracy</div>
+    </div>
+    <div class="nav-stat">
+      <div class="nav-stat-val" style="color:var(--vehicle)">5,000</div>
+      <div class="nav-stat-lbl">Train Samples</div>
+    </div>
+    <div class="live-dot"></div>
+  </div>
+</nav>
+
+<div class="main">
+
+<!-- ── LEFT ─────────────────────────────────────────────── -->
+<div class="left">
+
+  <!-- Simulated camera view -->
+  <div class="sec-hdr">Perimeter Camera Feed — Zone <span id="zone-lbl">LIVE</span></div>
+
+  <div class="cam-preview">
+   <img src="http://127.0.0.1:5000/video_feed" 
+     style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
+  </div>
+
+  <!-- Presets -->
+  <div class="sec-hdr">Detection Scenario</div>
+  <div class="presets">
+    <div class="preset" data-cls="Clear" onclick="loadPreset('Clear')">
+      <span class="preset-icon">🌿</span>
+      <span class="preset-name">Clear</span>
+    </div>
+    <div class="preset" data-cls="Human" onclick="loadPreset('Human')">
+      <span class="preset-icon">🧍</span>
+      <span class="preset-name">Human</span>
+    </div>
+    <div class="preset" data-cls="Vehicle" onclick="loadPreset('Vehicle')">
+      <span class="preset-icon">🚙</span>
+      <span class="preset-name">Vehicle</span>
+    </div>
+    <div class="preset" data-cls="Animal" onclick="loadPreset('Animal')">
+      <span class="preset-icon">🦊</span>
+      <span class="preset-name">Animal</span>
+    </div>
+    <div class="preset" data-cls="Environmental" onclick="loadPreset('Environmental')">
+      <span class="preset-icon">🌬️</span>
+      <span class="preset-name">Environ.</span>
+    </div>
+  </div>
+
+  <!-- Feature inputs -->
+  <div class="sec-hdr">Object Detection Features</div>
+  <div class="feat-scroll">
+    <div class="feat-grid">
+
+      <div>
+        <div class="feat-group">
+          <div class="feat-group-title">Bounding Box</div>
+          <div class="feat-row"><span class="feat-lbl">Width (norm.)</span><input class="feat-inp" id="f_bbox_width" type="number" step="0.01" value="0.08"/></div>
+          <div class="feat-row"><span class="feat-lbl">Height (norm.)</span><input class="feat-inp" id="f_bbox_height" type="number" step="0.01" value="0.22"/></div>
+          <div class="feat-row"><span class="feat-lbl">Area</span><input class="feat-inp" id="f_bbox_area" type="number" step="0.001" value="0.018"/></div>
+          <div class="feat-row"><span class="feat-lbl">Aspect ratio</span><input class="feat-inp" id="f_aspect_ratio" type="number" step="0.01" value="0.36"/></div>
+          <div class="feat-row"><span class="feat-lbl">X center</span><input class="feat-inp" id="f_bbox_x_center" type="number" step="0.01" value="0.5"/></div>
+          <div class="feat-row"><span class="feat-lbl">Y center</span><input class="feat-inp" id="f_bbox_y_center" type="number" step="0.01" value="0.6"/></div>
+        </div>
+
+        <div class="feat-group">
+          <div class="feat-group-title">Motion</div>
+          <div class="feat-row"><span class="feat-lbl">Magnitude</span><input class="feat-inp" id="f_motion_magnitude" type="number" step="0.01" value="0.55"/></div>
+          <div class="feat-row"><span class="feat-lbl">Dir X</span><input class="feat-inp" id="f_motion_direction_x" type="number" step="0.01" value="0.2"/></div>
+          <div class="feat-row"><span class="feat-lbl">Dir Y</span><input class="feat-inp" id="f_motion_direction_y" type="number" step="0.01" value="0.0"/></div>
+          <div class="feat-row"><span class="feat-lbl">Consistency</span><input class="feat-inp" id="f_motion_consistency" type="number" step="0.01" value="0.8"/></div>
+          <div class="feat-row"><span class="feat-lbl">Frames moving</span><input class="feat-inp" id="f_frames_in_motion" type="number" step="1" value="20"/></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="feat-group">
+          <div class="feat-group-title">Shape Descriptors</div>
+          <div class="feat-row"><span class="feat-lbl">Edge density</span><input class="feat-inp" id="f_edge_density" type="number" step="0.01" value="0.55"/></div>
+          <div class="feat-row"><span class="feat-lbl">Vert. symmetry</span><input class="feat-inp" id="f_vertical_symmetry" type="number" step="0.01" value="0.75"/></div>
+          <div class="feat-row"><span class="feat-lbl">Elongation</span><input class="feat-inp" id="f_elongation" type="number" step="0.01" value="0.5"/></div>
+        </div>
+
+        <div class="feat-group">
+          <div class="feat-group-title">Context</div>
+          <div class="feat-row"><span class="feat-lbl">Night mode</span><input class="feat-inp" id="f_night_mode" type="number" step="1" min="0" max="1" value="0"/></div>
+          <div class="feat-row"><span class="feat-lbl">Persist. frames</span><input class="feat-inp" id="f_persistence_frames" type="number" step="1" value="30"/></div>
+          <div class="feat-row"><span class="feat-lbl">Zone ID (0–7)</span><input class="feat-inp" id="f_zone_id" type="number" step="1" min="0" max="7" value="2"/></div>
+          <div class="feat-row"><span class="feat-lbl">Fence proximity</span><input class="feat-inp" id="f_proximity_to_fence" type="number" step="0.01" value="0.15"/></div>
+          <div class="feat-row"><span class="feat-lbl">Crossing vector</span><input class="feat-inp" id="f_crossing_vector" type="number" step="1" min="0" max="1" value="1"/></div>
+        </div>
+
+        <div class="feat-group">
+          <div class="feat-group-title">Movement & Environment</div>
+          <div class="feat-row"><span class="feat-lbl">Speed (m/s)</span><input class="feat-inp" id="f_speed_estimate" type="number" step="0.1" value="1.2"/></div>
+          <div class="feat-row"><span class="feat-lbl">Path linearity</span><input class="feat-inp" id="f_path_linearity" type="number" step="0.01" value="0.75"/></div>
+          <div class="feat-row"><span class="feat-lbl">Size change</span><input class="feat-inp" id="f_size_change_rate" type="number" step="0.01" value="0.05"/></div>
+          <div class="feat-row"><span class="feat-lbl">Brightness</span><input class="feat-inp" id="f_ambient_brightness" type="number" step="1" value="120"/></div>
+          <div class="feat-row"><span class="feat-lbl">BG variance</span><input class="feat-inp" id="f_background_variance" type="number" step="1" value="15"/></div>
+          <div class="feat-row"><span class="feat-lbl">Rain score</span><input class="feat-inp" id="f_rain_score" type="number" step="0.01" value="0.05"/></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <button class="classify-btn" id="classify-btn" onclick="classify()">▶ CLASSIFY DETECTION</button>
+</div>
+
+
+
+</div>
+
+<script>
+  
+// ── Embedded model metadata ──────────────────────────────────────────────────
+const META = {
+  accuracy: 100.0,
+  classes: ["Animal","Clear","Environmental","Human","Vehicle"],
+  classification_report: {
+    Animal:        {precision:1.0, recall:1.0, "f1-score":1.0, support:200},
+    Clear:         {precision:1.0, recall:1.0, "f1-score":1.0, support:300},
+    Environmental: {precision:1.0, recall:1.0, "f1-score":1.0, support:130},
+    Human:         {precision:1.0, recall:1.0, "f1-score":1.0, support:220},
+    Vehicle:       {precision:1.0, recall:1.0, "f1-score":1.0, support:150},
+  },
+  confusion_matrix: [
+    [200,0,0,0,0],
+    [0,300,0,0,0],
+    [0,0,130,0,0],
+    [0,0,0,220,0],
+    [0,0,0,0,150],
+  ],
+  feature_importances: {
+    motion_consistency:0.1127, rain_score:0.1104, speed_estimate:0.1018,
+    bbox_width:0.0933, path_linearity:0.0869, bbox_area:0.0735,
+    bbox_height:0.0674, vertical_symmetry:0.0528, persistence_frames:0.0527,
+    elongation:0.0515, motion_magnitude:0.0411, proximity_to_fence:0.0389,
+    background_variance:0.0312, crossing_vector:0.0298,
+  }
+};
+
+const DISPLAY_ORDER = ["Clear","Human","Vehicle","Animal","Environmental"];
+
+const THREAT = {
+  Clear:         {label:"All Clear",        severity:"None",     badge:"bg:var(--clear-bg);color:var(--clear);border:1px solid var(--clear-bd)", desc:"No intrusion detected. Camera zone nominal. Background activity within normal environmental thresholds."},
+  Human:         {label:"Human Intrusion",  severity:"Critical", badge:"bg:var(--human-bg);color:var(--human);border:1px solid var(--human-bd)", desc:"Bipedal subject detected approaching or crossing the perimeter fence line. High symmetry and linear path indicate intentional movement."},
+  Vehicle:       {label:"Vehicle Detected", severity:"High",     badge:"bg:var(--vehicle-bg);color:var(--vehicle);border:1px solid var(--vehicle-bd)", desc:"Motorised vehicle detected near the border zone. Wide bounding box, high speed estimate and linear path consistent with wheeled transport."},
+  Animal:        {label:"Animal Activity",  severity:"Low",      badge:"bg:var(--animal-bg);color:var(--animal);border:1px solid var(--animal-bd)", desc:"Animal movement detected — likely a false alarm. Irregular path linearity and low fence proximity reduce threat confidence."},
+  Environmental: {label:"Env. Disturbance", severity:"None",     badge:"bg:var(--env-bg);color:var(--env);border:1px solid var(--env-bd)", desc:"Environmental trigger: wind, foliage, rain artifact or lighting change. High rain score and low motion consistency indicate non-threat."},
+};
+
+const COLOR = {
+  Clear:"var(--clear)", Human:"var(--human)", Vehicle:"var(--vehicle)",
+  Animal:"var(--animal)", Environmental:"var(--env)"
+};
+
+// ── Presets ──────────────────────────────────────────────────────────────────
+const PRESETS = {
+  Clear:   {bbox_width:0.0,  bbox_height:0.0,  bbox_area:0.0,   aspect_ratio:1.0,  bbox_x_center:0.5,  bbox_y_center:0.5, motion_magnitude:0.03, motion_direction_x:0.01, motion_direction_y:0.01, motion_consistency:0.0,  frames_in_motion:0,  edge_density:0.08, vertical_symmetry:0.1, elongation:1.0, night_mode:0, persistence_frames:0,  zone_id:2, proximity_to_fence:0.8, crossing_vector:0, speed_estimate:0.0,  path_linearity:0.0,  size_change_rate:0.0,  ambient_brightness:150, background_variance:8,  rain_score:0.05, prev_alert_zone:0, time_of_day_sin:0.5, time_of_day_cos:0.87},
+  Human:   {bbox_width:0.07, bbox_height:0.25, bbox_area:0.018, aspect_ratio:0.28, bbox_x_center:0.45, bbox_y_center:0.65, motion_magnitude:0.6,  motion_direction_x:0.25, motion_direction_y:0.05, motion_consistency:0.82, frames_in_motion:28, edge_density:0.55, vertical_symmetry:0.78, elongation:0.45, night_mode:1, persistence_frames:35, zone_id:3, proximity_to_fence:0.08, crossing_vector:1, speed_estimate:1.3,  path_linearity:0.82, size_change_rate:0.07, ambient_brightness:45,  background_variance:12, rain_score:0.04, prev_alert_zone:0, time_of_day_sin:-0.97, time_of_day_cos:-0.26},
+  Vehicle: {bbox_width:0.30, bbox_height:0.14, bbox_area:0.042, aspect_ratio:2.14, bbox_x_center:0.55, bbox_y_center:0.72, motion_magnitude:1.9,  motion_direction_x:0.7,  motion_direction_y:0.0,  motion_consistency:0.92, frames_in_motion:18, edge_density:0.65, vertical_symmetry:0.6,  elongation:2.2,  night_mode:0, persistence_frames:22, zone_id:5, proximity_to_fence:0.15, crossing_vector:1, speed_estimate:7.5,  path_linearity:0.95, size_change_rate:0.18, ambient_brightness:130, background_variance:7,  rain_score:0.02, prev_alert_zone:1, time_of_day_sin:0.0,  time_of_day_cos:-1.0},
+  Animal:  {bbox_width:0.06, bbox_height:0.05, bbox_area:0.003, aspect_ratio:1.2,  bbox_x_center:0.3,  bbox_y_center:0.55, motion_magnitude:0.65, motion_direction_x:0.3,  motion_direction_y:0.35, motion_consistency:0.35, frames_in_motion:9,  edge_density:0.4,  vertical_symmetry:0.3,  elongation:0.9,  night_mode:1, persistence_frames:12, zone_id:1, proximity_to_fence:0.55, crossing_vector:0, speed_estimate:1.9,  path_linearity:0.22, size_change_rate:0.02, ambient_brightness:35,  background_variance:18, rain_score:0.03, prev_alert_zone:0, time_of_day_sin:-0.97, time_of_day_cos:-0.26},
+  Environmental:{bbox_width:0.2, bbox_height:0.18, bbox_area:0.036, aspect_ratio:1.1, bbox_x_center:0.6, bbox_y_center:0.4, motion_magnitude:0.28, motion_direction_x:0.2, motion_direction_y:0.22, motion_consistency:0.12, frames_in_motion:4, edge_density:0.22, vertical_symmetry:0.2, elongation:1.1, night_mode:0, persistence_frames:5, zone_id:4, proximity_to_fence:0.6, crossing_vector:0, speed_estimate:0.18, path_linearity:0.15, size_change_rate:0.02, ambient_brightness:80, background_variance:75, rain_score:0.82, prev_alert_zone:0, time_of_day_sin:0.87, time_of_day_cos:0.5},
+};
+
+const FIELDS = ['bbox_width','bbox_height','bbox_area','aspect_ratio','bbox_x_center','bbox_y_center',
+  'motion_magnitude','motion_direction_x','motion_direction_y','motion_consistency','frames_in_motion',
+  'edge_density','vertical_symmetry','elongation','night_mode','persistence_frames','zone_id',
+  'proximity_to_fence','crossing_vector','speed_estimate','path_linearity','size_change_rate',
+  'ambient_brightness','background_variance','rain_score'];
+
+function getInputs(){
+  const f={};
+  FIELDS.forEach(k=>{const e=document.getElementById('f_'+k);f[k]=e?parseFloat(e.value)||0:0;});
+  f.time_of_day_sin=0.5; f.time_of_day_cos=0.87; f.prev_alert_zone=0;
+  return f;
+}
+
+function loadPreset(cls){
+  const p=PRESETS[cls];
+  FIELDS.forEach(k=>{const e=document.getElementById('f_'+k);if(e&&p[k]!==undefined){e.value=p[k];e.classList.add('hi');}});
+  document.querySelectorAll('.preset').forEach(b=>b.className='preset');
+  document.querySelector(`.preset[data-cls="${cls}"]`)?.classList.add('preset','active-'+cls);
+  document.getElementById('zone-lbl').textContent=p.zone_id||0;
+  document.getElementById('cam-zone').textContent=String(p.zone_id||0).padStart(2,'0');
+  drawCamera(cls, p);
+}
+
+// ── Rule-based classifier (mirrors trained RF patterns) ───────────────────
+function classify_rf(f){
+  let s={Clear:0,Human:0,Vehicle:0,Animal:0,Environmental:0};
+
+  // Clear signals
+  if(f.motion_magnitude<0.1&&f.motion_consistency<0.1&&f.bbox_area<0.001){s.Clear+=4.0;}
+  if(f.rain_score<0.1&&f.background_variance<20&&f.motion_magnitude<0.15){s.Clear+=2.0;}
+  if(f.persistence_frames===0&&f.frames_in_motion===0){s.Clear+=3.0;}
+
+  // Human signals
+  if(f.vertical_symmetry>0.6){s.Human+=2.5;}
+  if(f.aspect_ratio<0.45&&f.bbox_height>0.15){s.Human+=2.5;}
+  if(f.path_linearity>0.6&&f.speed_estimate>0.5&&f.speed_estimate<3.5){s.Human+=2.0;}
+  if(f.crossing_vector===1&&f.proximity_to_fence<0.2){s.Human+=2.0;}
+  if(f.motion_consistency>0.7&&f.frames_in_motion>15){s.Human+=1.5;}
+  if(f.persistence_frames>20&&f.motion_magnitude>0.3){s.Human+=1.0;}
+
+  // Vehicle signals
+  if(f.aspect_ratio>1.5&&f.bbox_width>0.15){s.Vehicle+=3.0;}
+  if(f.speed_estimate>4.0){s.Vehicle+=3.0;}
+  if(f.path_linearity>0.8&&f.speed_estimate>3.0){s.Vehicle+=2.0;}
+  if(f.motion_consistency>0.8&&f.motion_magnitude>1.2){s.Vehicle+=1.5;}
+  if(f.bbox_area>0.03){s.Vehicle+=1.0;}
+
+  // Animal signals
+  if(f.path_linearity<0.4&&f.motion_magnitude>0.3){s.Animal+=2.5;}
+  if(f.motion_consistency<0.5&&f.frames_in_motion<15&&f.motion_magnitude>0.2){s.Animal+=2.0;}
+  if(f.bbox_area<0.01&&f.motion_magnitude>0.2){s.Animal+=1.5;}
+  if(f.vertical_symmetry<0.4&&f.aspect_ratio<1.5){s.Animal+=1.0;}
+  if(f.proximity_to_fence>0.4&&f.crossing_vector===0){s.Animal+=0.8;}
+
+  // Environmental signals
+  if(f.rain_score>0.5){s.Environmental+=3.5;}
+  if(f.background_variance>50){s.Environmental+=2.5;}
+  if(f.motion_consistency<0.25&&f.motion_magnitude<0.5){s.Environmental+=2.0;}
+  if(f.rain_score>0.3&&f.background_variance>30){s.Environmental+=1.5;}
+
+  const total=Object.values(s).reduce((a,b)=>a+b,0)||1;
+  const probs={};
+  Object.keys(s).forEach(k=>probs[k]=Math.max(0,s[k]/total+(Math.random()-0.5)*0.015));
+  const t2=Object.values(probs).reduce((a,b)=>a+b,0);
+  Object.keys(probs).forEach(k=>probs[k]=probs[k]/t2);
+  const pred=Object.keys(probs).reduce((a,b)=>probs[a]>probs[b]?a:b);
+  return {prediction:pred, confidence:probs[pred]*100, probabilities:probs};
+}
+
+
+
+const history=[];
+
+async function classify(){
+  const btn = document.getElementById('classify-btn');
+  btn.textContent = 'ANALYSING...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch("http://127.0.0.1:5000/predict", {
+      method: "POST"
+    });
+
+    const data = await res.json();
+
+    renderResult(data);
+    renderProbs(data);
+    addHistory(data);
+
+  } catch (err) {
+    console.error("Backend error:", err);
+  }
+
+  btn.textContent = '▶ CLASSIFY DETECTION';
+  btn.disabled = false;
+}
+
+async function fetchLog() {
+  const res = await fetch("http://127.0.0.1:5000/log");
+  const data = await res.json();
+
+  const container = document.getElementById("hist-list");
+
+  if (data.length === 0) {
+    container.innerHTML = `
+      <div class="idle" style="padding:16px">
+        <span class="idle-icon">📋</span>No detections yet
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = data.map(h => `
+    <div class="hist-item">
+      <span class="hist-cls ${h.label}">${h.label}</span>
+      <span class="hist-desc">${THREAT[h.label].label}</span>
+      <span class="hist-conf">${h.confidence}%</span>
+      <span class="hist-time">${h.time}</span>
+    </div>
+  `).join('');
+}
+
+function renderResult(r){
+  const cls=r.prediction, info=THREAT[cls];
+  const conf=r.confidence.toFixed(1);
+  const badgeParts=info.badge.split(';');
+  const bStyle=badgeParts.map(p=>p.replace('bg:','background:').trim()).join(';');
+
+  document.getElementById('result-area').innerHTML=`
+    <div class="result-card ${cls}">
+      <div class="result-top">
+        <div>
+          <div style="font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px">Detected</div>
+          <div class="result-class ${cls}">${cls}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${info.label}</div>
+        </div>
+        <span class="result-badge" style="${bStyle}">⚠ ${info.severity}</span>
+      </div>
+      <div class="result-desc">${info.desc}</div>
+      <div class="conf-row">
+        <span class="conf-lbl">Model Confidence</span>
+        <span class="conf-val" style="color:${COLOR[cls]}">${conf}%</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill" style="width:${conf}%;background:${COLOR[cls]}"></div></div>
+    </div>
+  `;
+  updateBbox(cls);
+}
+
+function renderProbs(r){
+  const card=document.getElementById('prob-card');
+  card.style.display='block';
+  document.getElementById('prob-grid').innerHTML=DISPLAY_ORDER.map(c=>{
+    const pct=(r.probabilities[c]*100).toFixed(1);
+    return `<div class="prob-row">
+      <span class="prob-name ${c}">${c}</span>
+      <div class="prob-bg"><div class="prob-bar ${c}" style="width:${pct}%"></div></div>
+      <span class="prob-pct">${pct}%</span>
+    </div>`;
+  }).join('');
+}
+
+function addHistory(r){
+  const t=new Date().toLocaleTimeString('en-GB',{hour12:false});
+  history.unshift({cls:r.prediction,conf:r.confidence.toFixed(0),time:t,desc:THREAT[r.prediction].label});
+  if(history.length>8) history.pop();
+  document.getElementById('hist-list').innerHTML=history.map(h=>`
+    <div class="hist-item">
+      <span class="hist-cls ${h.cls}">${h.cls}</span>
+      <span class="hist-desc">${h.desc}</span>
+      <span class="hist-conf">${h.conf}%</span>
+      <span class="hist-time">${h.time}</span>
+    </div>`).join('');
+}
+setInterval(fetchLog, 2000);
+
+// ── Camera canvas visualisation ──────────────────────────────────────────────
+// function drawCamera(cls, p){
+//   const canvas=document.getElementById('cam');
+//   const ctx=canvas.getContext('2d');
+//   const W=640,H=360;
+//   const night=p.night_mode||0;
+
+//   ctx.clearRect(0,0,W,H);
+
+//   // Background — terrain
+//   const grad=ctx.createLinearGradient(0,0,0,H);
+//   if(night){
+//     grad.addColorStop(0,'#0a0f1a'); grad.addColorStop(0.5,'#0d1520'); grad.addColorStop(1,'#111a10');
+//   } else {
+//     grad.addColorStop(0,'#4a6741'); grad.addColorStop(0.55,'#5a7a51'); grad.addColorStop(1,'#3d5c34');
+//   }
+//   ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+
+//   // Horizon / terrain detail
+//   ctx.fillStyle=night?'#0b140e':'#486040';
+//   ctx.beginPath(); ctx.moveTo(0,200);
+//   for(let x=0;x<=W;x+=40) ctx.lineTo(x,195+Math.sin(x*0.05)*8+Math.cos(x*0.03)*5);
+//   ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.fill();
+
+//   // Fence line
+//   ctx.strokeStyle=night?'rgba(180,190,200,0.5)':'rgba(200,210,200,0.7)';
+//   ctx.lineWidth=1.5; ctx.setLineDash([]);
+//   ctx.beginPath(); ctx.moveTo(0,230); ctx.lineTo(W,230); ctx.stroke();
+//   for(let x=30;x<W;x+=60){
+//     ctx.beginPath(); ctx.moveTo(x,215); ctx.lineTo(x,245); ctx.stroke();
+//     ctx.beginPath(); ctx.moveTo(x-8,220); ctx.lineTo(x+8,220); ctx.stroke();
+//   }
+
+//   // Environmental: rain overlay
+//   if(cls==='Environmental'){
+//     ctx.strokeStyle='rgba(150,180,220,0.18)'; ctx.lineWidth=0.8;
+//     for(let i=0;i<120;i++){
+//       const rx=Math.random()*W, ry=Math.random()*H;
+//       ctx.beginPath(); ctx.moveTo(rx,ry); ctx.lineTo(rx+3,ry+10); ctx.stroke();
+//     }
+//   }
+
+//   // Grid overlay
+//   ctx.strokeStyle=night?'rgba(0,220,150,0.08)':'rgba(255,255,255,0.05)';
+//   ctx.lineWidth=0.5; ctx.setLineDash([4,8]);
+//   for(let x=0;x<W;x+=80){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+//   for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+//   ctx.setLineDash([]);
+
+//   // Night mode tint
+//   if(night){
+//     ctx.fillStyle='rgba(0,40,20,0.35)'; ctx.fillRect(0,0,W,H);
+//   }
+
+//   // Draw subject shape
+//   const bx=Math.round((p.bbox_x_center||0.5)*W);
+//   const by=Math.round((p.bbox_y_center||0.6)*H);
+//   const bw=Math.round((p.bbox_width||0.08)*W);
+//   const bh=Math.round((p.bbox_height||0.2)*H);
+
+//   if(cls==='Human'){
+//     const col=night?'rgba(0,230,160,0.9)':'rgba(240,180,80,0.9)';
+//     ctx.fillStyle=col;
+//     ctx.beginPath(); ctx.arc(bx,by-bh*0.4,bw*0.4,0,Math.PI*2); ctx.fill();
+//     ctx.fillRect(bx-bw*0.35,by-bh*0.3,bw*0.7,bh*0.55);
+//     ctx.fillRect(bx-bw*0.5,by+bh*0.1,bw*0.22,bh*0.3);
+//     ctx.fillRect(bx+bw*0.28,by+bh*0.1,bw*0.22,bh*0.3);
+//   } else if(cls==='Vehicle'){
+//     const col=night?'rgba(80,150,255,0.9)':'rgba(160,160,200,0.9)';
+//     ctx.fillStyle=col;
+//     ctx.beginPath(); ctx.roundRect(bx-bw/2,by-bh/2,bw,bh,4); ctx.fill();
+//     ctx.fillStyle=night?'rgba(255,255,100,0.6)':'rgba(255,255,200,0.5)';
+//     ctx.beginPath(); ctx.arc(bx-bw*0.3,by+bh*0.35,bh*0.2,0,Math.PI*2); ctx.fill();
+//     ctx.beginPath(); ctx.arc(bx+bw*0.3,by+bh*0.35,bh*0.2,0,Math.PI*2); ctx.fill();
+//   } else if(cls==='Animal'){
+//     const col=night?'rgba(180,120,255,0.85)':'rgba(160,120,80,0.85)';
+//     ctx.fillStyle=col;
+//     ctx.beginPath(); ctx.ellipse(bx,by,bw*0.55,bh*0.35,0,0,Math.PI*2); ctx.fill();
+//     ctx.beginPath(); ctx.ellipse(bx+bw*0.4,by-bh*0.2,bw*0.2,bh*0.2,0,0,Math.PI*2); ctx.fill();
+//   } else if(cls==='Environmental'){
+//     ctx.fillStyle='rgba(200,220,200,0.12)';
+//     for(let i=0;i<6;i++){
+//       ctx.beginPath();
+//       ctx.arc(bx+(Math.random()-0.5)*bw,by+(Math.random()-0.5)*bh,bw*0.15+Math.random()*bw*0.2,0,Math.PI*2);
+//       ctx.fill();
+//     }
+//   }
+
+//   // Bbox rect
+//   if(cls!=='Clear'){
+//     const colMap={Human:'#f97316',Vehicle:'#3b82f6',Animal:'#a78bfa',Environmental:'#fbbf24'};
+//     const c=colMap[cls]||'#34d399';
+//     ctx.strokeStyle=c; ctx.lineWidth=2; ctx.setLineDash([]);
+//     ctx.strokeRect(bx-bw/2,by-bh/2,bw,bh);
+//     // corners
+//     ctx.strokeStyle=c; ctx.lineWidth=2.5;
+//     const cs=12;
+//     [[bx-bw/2,by-bh/2,cs,0,0,cs],[bx+bw/2,by-bh/2,-cs,0,0,cs],
+//      [bx-bw/2,by+bh/2,cs,0,0,-cs],[bx+bw/2,by+bh/2,-cs,0,0,-cs]].forEach(([x,y,dx1,dy1,dx2,dy2])=>{
+//       ctx.beginPath(); ctx.moveTo(x+dx1,y); ctx.lineTo(x,y); ctx.lineTo(x,y+dy2); ctx.stroke();
+//     });
+//     // confidence label on canvas
+//     ctx.fillStyle=c; ctx.fillRect(bx-bw/2,by-bh/2-18,bw,17);
+//     ctx.fillStyle='#07090d'; ctx.font='bold 9px IBM Plex Mono,monospace';
+//     ctx.textAlign='center'; ctx.fillText(cls.toUpperCase(),bx,by-bh/2-6);
+//   }
+
+//   // Timestamp
+//   const now=new Date();
+//   document.getElementById('cam-time').textContent=now.toLocaleTimeString('en-GB',{hour12:false});
+//   document.getElementById('cam-zone').textContent=String(p.zone_id||0).padStart(2,'0');
+//   document.querySelector('.cam-label').innerHTML=
+//     `CAM-${String(p.zone_id||0).padStart(2,'0')} · ${night?'<span style="color:#34d399">IR ON</span>':'IR OFF'}`;
+// }
+
+
+function updateBbox(cls){ /* handled in drawCamera */ }
+
+// ── Build metrics panels ─────────────────────────────────────────────────────
+function buildMetrics(){
+  const ORDER=['Human','Vehicle','Animal','Environmental','Clear'];
+  const C={Human:'var(--human)',Vehicle:'var(--vehicle)',Animal:'var(--animal)',Environmental:'var(--env)',Clear:'var(--clear)'};
+  document.getElementById('perf-rows').innerHTML=ORDER.map(c=>{
+    const r=META.classification_report[c];
+    return `<div class="mrow">
+      <span class="mrow-cls" style="color:${C[c]}">${c}</span>
+      <span class="mrow-val">${r.precision.toFixed(2)}</span>
+      <span class="mrow-val">${r.recall.toFixed(2)}</span>
+      <span class="mrow-val">${r['f1-score'].toFixed(2)}</span>
+      <span class="mrow-n">${r.support}</span>
+    </div>`;
+  }).join('');
+
+  // Confusion matrix — meta classes order: Animal,Clear,Environmental,Human,Vehicle
+  const CLS=META.classes;
+  const CM=META.confusion_matrix;
+  document.getElementById('cm-wrap').innerHTML=`
+    <table class="cm">
+      <tr><th>↓/→</th>${CLS.map(c=>`<th>${c.slice(0,4)}</th>`).join('')}</tr>
+      ${CM.map((row,i)=>`<tr><th style="color:${C[CLS[i]]}">${CLS[i].slice(0,4)}</th>
+        ${row.map((v,j)=>`<td class="${i===j?'d '+CLS[i]:''}">${v}</td>`).join('')}</tr>`).join('')}
+    </table>`;
+
+  // Feature importance
+  const fi=META.feature_importances;
+  const maxV=Math.max(...Object.values(fi));
+  document.getElementById('fi-rows').innerHTML=Object.entries(fi).map(([k,v])=>`
+    <div class="fi-row">
+      <span class="fi-name">${k.replace(/_/g,' ')}</span>
+      <div class="fi-bg"><div class="fi-bar" style="width:${(v/maxV*100).toFixed(0)}%"></div></div>
+      <span class="fi-val">${(v*100).toFixed(1)}%</span>
+    </div>`).join('');
+}
+
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    t.classList.toggle('on',['perf','cm','fi'][i]===tab);
+  });
+  document.querySelectorAll('.tp').forEach(p=>{
+    p.classList.toggle('on',p.id==='tp-'+tab);
+  });
+}
+
+async function updateStatus() {
+    const res = await fetch("http://127.0.0.1:5000/status");
+    const data = await res.json();
+
+    document.getElementById("result").innerText = data.label;
+    document.getElementById("confidence").innerText = data.confidence + "%";
+}
+
+async function updateLog() {
+  try {
+    const res = await fetch("http://127.0.0.1:5000/log");
+    const data = await res.json();
+
+    if (!data.length) return;
+
+    document.getElementById('hist-list').innerHTML = data.map(h => `
+      <div class="hist-item">
+        <span class="hist-cls ${h.label}">${h.label}</span>
+        <span class="hist-desc">${h.label} detected</span>
+        <span class="hist-conf">${h.confidence}%</span>
+        <span class="hist-time">${h.time}</span>
+      </div>
+    `).join('');
+
+  } catch (err) {
+    console.error("Log fetch error:", err);
+  }
+}
+setInterval(updateLog, 1000);
+
+function startDetection() {
+    fetch("http://127.0.0.1:5000/trigger", {
+        method: "POST"
+    });
+    detection_log.appendleft({
+    "label": final_label,
+    "confidence": round(max_conf * 100, 2),
+    "time": datetime.now().strftime("%H:%M:%S")
+})
+}
+
+// update every second
+setInterval(classify, 2000);
+
+loadPreset('Human');
+
+// ── Clock ────────────────────────────────────────────────────────────────────
+setInterval(()=>{
+  document.getElementById('cam-time').textContent=
+    new Date().toLocaleTimeString('en-GB',{hour12:false});
+},1000);
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+buildMetrics();
+loadPreset('Human');
+</script>
+</body>
+</html>

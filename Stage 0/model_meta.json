@@ -1,0 +1,138 @@
+{
+  "features": [
+    "bbox_width",
+    "bbox_height",
+    "bbox_area",
+    "aspect_ratio",
+    "bbox_x_center",
+    "bbox_y_center",
+    "motion_magnitude",
+    "motion_direction_x",
+    "motion_direction_y",
+    "motion_consistency",
+    "frames_in_motion",
+    "edge_density",
+    "vertical_symmetry",
+    "elongation",
+    "time_of_day_sin",
+    "time_of_day_cos",
+    "night_mode",
+    "persistence_frames",
+    "zone_id",
+    "proximity_to_fence",
+    "crossing_vector",
+    "speed_estimate",
+    "path_linearity",
+    "size_change_rate",
+    "ambient_brightness",
+    "background_variance",
+    "rain_score",
+    "prev_alert_zone"
+  ],
+  "classes": [
+    "Animal",
+    "Clear",
+    "Environmental",
+    "Human",
+    "Vehicle"
+  ],
+  "accuracy": 100.0,
+  "feature_importances": {
+    "motion_consistency": 0.1127,
+    "rain_score": 0.1104,
+    "speed_estimate": 0.1018,
+    "bbox_width": 0.0933,
+    "path_linearity": 0.0869,
+    "bbox_area": 0.0735,
+    "bbox_height": 0.0674,
+    "vertical_symmetry": 0.0528,
+    "persistence_frames": 0.0527,
+    "elongation": 0.0515,
+    "frames_in_motion": 0.0381,
+    "edge_density": 0.0355,
+    "background_variance": 0.034,
+    "aspect_ratio": 0.0337
+  },
+  "classification_report": {
+    "Animal": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "Clear": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 300.0
+    },
+    "Environmental": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 130.0
+    },
+    "Human": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 220.0
+    },
+    "Vehicle": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 150.0
+    },
+    "accuracy": 1.0,
+    "macro avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1000.0
+    },
+    "weighted avg": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1000.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      200,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      130,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      220,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      150
+    ]
+  ]
+}
