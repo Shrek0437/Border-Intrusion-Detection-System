@@ -36,19 +36,19 @@ This project provides a **Stage 0 prototype** that focuses on:
 
 ## 🏗️ Project Structure
 
-Stage 0/
-│
-├── stage0_camera.py # Main backend (YOLO + ML pipeline)
-├── model.pkl # Trained classifier
-├── scaler.pkl # Feature scaler
-├── label_encoder.pkl # Label encoder
-├── app.py (if Flask used) # API endpoints
-│
-├── templates/
-│ └── index.html # Frontend dashboard
-│
-└── static/
-└── (CSS/JS assets)
+        Stage 0/
+        │
+        ├── stage0_camera.py # Main backend (YOLO + ML pipeline)
+        ├── model.pkl # Trained classifier
+        ├── scaler.pkl # Feature scaler
+        ├── label_encoder.pkl # Label encoder
+        ├── app.py (if Flask used) # API endpoints
+        │
+        ├── templates/
+        │ └── index.html # Frontend dashboard
+        │
+        └── static/
+        └── (CSS/JS assets)
 ---
 
 ## ⚙️ Tech Stack
