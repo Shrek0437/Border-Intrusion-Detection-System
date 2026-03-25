@@ -35,3 +35,49 @@ This project provides a **Stage 0 prototype** that focuses on:
 ---
 
 ## 🏗️ Project Structure
+
+Stage 0/
+│
+├── stage0_camera.py # Main backend (YOLO + ML pipeline)
+├── model.pkl # Trained classifier
+├── scaler.pkl # Feature scaler
+├── label_encoder.pkl # Label encoder
+├── app.py (if Flask used) # API endpoints
+│
+├── templates/
+│ └── index.html # Frontend dashboard
+│
+└── static/
+└── (CSS/JS assets)
+---
+
+## ⚙️ Tech Stack
+
+- **Python**
+- **OpenCV**
+- **Ultralytics YOLOv8**
+- **Scikit-learn**
+- **Flask (for API)**
+- **HTML + CSS + JavaScript**
+
+---
+
+## 🧠 Architecture Diagram
+<img width="1022" height="601" alt="image" src="https://github.com/user-attachments/assets/1a98102f-d45b-42cc-b3f6-ece8e5ef17b5" />
+
+---
+## 📡 API Endpoints
+
+| Endpoint        | Method | Description                  |
+|----------------|--------|------------------------------|
+| `/video_feed`  | GET    | Live camera stream           |
+| `/predict`     | POST   | Returns latest prediction    |
+| `/log`         | GET    | Detection history            |
+| `/status`      | GET    | Current detection            |
+
+## 📦 Installation
+
+```bash
+pip install opencv-python ultralytics scikit-learn flask numpy```
+
+
